@@ -38,7 +38,8 @@ class VPC(object):
         self.state = ""
         self.is_default = ""
         self.cidr = ""
-        self.assigned_subnets = []
+        self.assigned_ipv4_subnets = []
+        self.assigned_ipv6_subnets = []
 
     def get_all_tags(self, key:str):
         return [x["Value"] for x in self.tags if x["Key"] == key]
@@ -49,6 +50,13 @@ class VPC(object):
         if values:
             value = values[0]
         return value
+
+    def contains_subnet(self, subnet:str):
+        # IPv4
+        subnet_count = len([x for x in self.assigned_ipv4_subnets if x["CidrBlock"] == subnet])
+        # IPv6
+        subnet_count += len([x for x in self.assigned_ipv6_subnets if x["Ipv6CidrBlock"] == subnet])
+        return subnet_count > 0
 
 class SecurityGroupPrinter(object):
     def print_csv(self, security_groups:list, vpcs=[]):
@@ -66,11 +74,11 @@ class SecurityGroupPrinter(object):
                 # continue
                 output_dict["vpc_id"] = security_group.vpc_id
                 if cur_vpc:
-                    output_dict["vpc_id"] = output_dict["vpc_id"] + "(" + str(cur_vpc.get_tag("Name")) + ")"
-                output_dict["group_id"] = security_group.group_id + "(" + str(security_group.name) + ")"
+                    output_dict["vpc_id"] = output_dict["vpc_id"] + " (" + str(cur_vpc.get_tag("Name")) + ")"
+                output_dict["group_id"] = security_group.group_id + " (" + str(security_group.name) + ")"
                 output_dict["tags"] = ",".join([str(x["Key"] + "=" + x["Value"]) for x in security_group.tags])
                 output_dict["direction"] = permission.direction
-                # build from/to
+                # build from/to field
                 output_ranges = []
                 output_ranges += [str(x["CidrIp"]) for x in permission.ipv4_ranges]
                 output_ranges += [str(x["CidrIp6"]) for x in permission.ipv6_ranges]
@@ -111,7 +119,8 @@ class VPCParser(object):
             cur_vpc.state = vpc["State"]
             cur_vpc.is_default = vpc["IsDefault"]
             cur_vpc.cidr = vpc["CidrBlock"]
-            cur_vpc.assigned_subnets = vpc["CidrBlockAssociationSet"]
+            cur_vpc.assigned_ipv4_subnets = vpc.get("CidrBlockAssociationSet",[])
+            cur_vpc.assigned_ipv4_subnets = vpc.get("Ipv6CidrBlockAssociationSet",[])
             parsed_vpcs.append(cur_vpc)
         return parsed_vpcs
         
@@ -186,8 +195,9 @@ def main():
 
     # Set up arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--groups", help="Path to file containing describe-security-groups")
-    parser.add_argument("--vpcs", help="Path to file containing describe-vpcs")
+    parser.add_argument("--groups", help="Path to file containing ec2 describe-security-groups")
+    parser.add_argument("--vpcs", help="Path to file containing ec2 describe-vpcs")
+    parser.add_argument("--instances", help="Path to file containing ec2 describe-instances")
     args = parser.parse_args()
 
     # Read contents
