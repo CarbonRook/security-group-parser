@@ -1,12 +1,33 @@
 #!/usr/bin/env python3
 
-# Reference
+# Reference https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-security-groups.html
 
 import argparse
 import json
 
 EGRESS_PERM_ID = "IpPermissionsEgress"
 INGRESS_PERM_ID = "IpPermissions"
+
+class SecurityGroup(object):
+    def __init__(self):
+        self.description = ""
+        self.name = ""
+        self.owner_id = ""
+        self.group_id = ""
+        self.tags = []
+        self.vpc_id = ""
+
+class IPPermission(object):
+    def __init__(self):
+        self.permission_type = "" # ingress/egress
+        self.from_port = None
+        self.to_port = None
+        self.protocol = ""
+        self.ipv4_ranges = [] # dict of CidrIp and Description
+        self.ipv6_ranges = [] # dict of CidrIp6 and Description
+        self.prefix_list_ids = [] # dict of PrefixListId and Description
+        self.user_id_group_pairs = [] # dict of GroupId, GroupName, UserId, Description, PeeringStatus, VpcId, VpcPeeringConnectionId
+        
 
 class SecurityGroupParser(object):
     def __init__(self, security_group_json):
@@ -19,7 +40,7 @@ class SecurityGroupParser(object):
             group_name = security_group["GroupName"]
             group_desc = security_group["Description"]
             vpc_id = security_group["VpcId"]
-            tags = ",".join([str(x["Key"] + "=" + x["Value"]) for x in security_group["Tags"]])
+            tags = ",".join([str(x["Key"] + "=" + x["Value"]) for x in security_group.get("Tags",[])])
             prefix = [vpc_id, group_id, group_name, group_desc, tags, "ingress"]
 
             # Ingress rules
@@ -88,15 +109,16 @@ def main():
 
     # Set up arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("filename")
+    parser.add_argument("--groups", help="Path to file containing describe-security-groups")
+    parser.add_argument("--vpcs", help="Path to file containing describe-vpcs")
     args = parser.parse_args()
 
     # Read contents
-    with open(args.filename, 'r') as infile:
-        file_contents = infile.read()
+    with open(args.groups, 'r') as describe_sg_file:
+        sg_description = describe_sg_file.read()
 
     # Create parser
-    aws_parser = SecurityGroupParser(file_contents)
+    aws_parser = SecurityGroupParser(sg_description)
     aws_parser.parse_groups()
     aws_parser.print_rules()
  
