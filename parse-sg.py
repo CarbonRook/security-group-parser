@@ -59,18 +59,21 @@ class VPC(object):
         return subnet_count > 0
 
 class SecurityGroupPrinter(object):
-    def print_csv(self, security_groups:list, vpcs=[]):
+    def print_csv(self, security_groups:list, vpcs=None):
         output = []
         for security_group in security_groups:
             for permission in security_group.ip_permissions:
                 output_dict = {}
-                # get the current vpc (if it exists in the vpc list provided)
-                cur_vpc = [x for x in vpcs if security_group.vpc_id == x.vpc_id]
-                # we should only have 1 vpc
-                if len(cur_vpc) == 1:
-                    cur_vpc = cur_vpc[0]
-                elif len(cur_vpc) > 1:
-                    raise Exception("Found more than one VPC with the same ID")
+                
+                # Check if we have VPCs defined
+                if vpcs is not None:
+                    # get the current vpc (if it exists in the vpc list provided)
+                    cur_vpc = [x for x in vpcs if security_group.vpc_id == x.vpc_id]
+                    # get the first element or, if not found, set None
+                    cur_vpc = next(iter(cur_vpc), None)
+                else:
+                    cur_vpc = None
+
                 # continue
                 output_dict["vpc_id"] = security_group.vpc_id
                 if cur_vpc:
@@ -86,15 +89,9 @@ class SecurityGroupPrinter(object):
                 output_ranges += [str(x["UserId"] + "/" + x["GroupId"]) for x in permission.user_id_group_pairs]
                 output_dict["permitted_entity"] = ",".join([str(x) for x in output_ranges])
                 # set the ports to a single field
-                if permission.from_port == permission.to_port:
-                    output_dict["port_no"] = permission.from_port
-                else:
-                    output_dict["port_no"] = str(permission.from_port) + "-" + str(permission.to_port)
+                output_dict["port_no"] = self.cat_ports(permission.from_port, permission.to_port)
                 # set the protocol to a readable format
-                if permission.protocol == "-1":
-                    output_dict["protocol"] = "any"
-                else:
-                    output_dict["protocol"] = permission.protocol
+                output_dict["protocol"] = self.map_variable(permission.protocol)
                 output.append(output_dict)
         # if we have no ouput abandon
         if not output:
@@ -104,6 +101,21 @@ class SecurityGroupPrinter(object):
         writer.writeheader()
         writer.writerows(output)
         return None
+
+    def map_variable(self, input_str):
+        var_map = {
+                "0.0.0.0/0": "any",
+                "-1": "any"
+                }
+        if input_str in var_map:
+            return var_map[input_str]
+        else:
+            return input_str
+
+    def cat_ports(self, from_port, to_port):
+        if from_port == to_port:
+            return str(from_port)
+        return str(from_port) + "-" + str(to_port)
 
 
 class VPCParser(object):
