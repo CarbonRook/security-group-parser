@@ -16,10 +16,11 @@ class SecurityGroup(object):
         self.group_id = ""
         self.tags = []
         self.vpc_id = ""
+        self.ip_permissions = []
 
 class IPPermission(object):
     def __init__(self):
-        self.permission_type = "" # ingress/egress
+        self.direction = "" # ingress/egress
         self.from_port = None
         self.to_port = None
         self.protocol = ""
@@ -27,58 +28,82 @@ class IPPermission(object):
         self.ipv6_ranges = [] # dict of CidrIp6 and Description
         self.prefix_list_ids = [] # dict of PrefixListId and Description
         self.user_id_group_pairs = [] # dict of GroupId, GroupName, UserId, Description, PeeringStatus, VpcId, VpcPeeringConnectionId
+
+class VPC(object):
+    def __init__(self):
+        self.vpc_id = ""
+        self.tags = []
+        self.state = ""
+        self.is_default = ""
+        self.cidr = ""
+        self.assigned_subnets = []
+
+
+class SecurityGroupPrinter(object):
+    def print_csv(self, security_group:SecurityGroup, vpcs=None):
+        # if protocol = -1 print any
+        # if from_port and to_port are the same just print from_port, if they're different print "from_port-to_port"
+        return None
+
+
+class VPCParser(object):
+    def __init__(self, vpc_json:str):
+        self.vpc_json = json.loads(vpc_json)
+        
+    def parse_vpcs(self):
+        parsed_vpcs = []
+        for vpc in self.vpc_json["Vpcs"]:
+            cur_vpc = VPC()
+            cur_vpc.vpc_id = vpc["VpcId"]
+            cur_vpc.tags = vpc.get("Tags",[])
+            cur_vpc.state = vpc["State"]
+            cur_vpc.is_default = vpc["IsDefault"]
+            cur_vpc.cidr = vpc["CidrBlock"]
+            cur_vpc.assigned_subnets = vpc["CidrBlockAssociationSet"]
+            parsed_vpcs.append(cur_vpc)
+        return parsed_vpcs
         
 
 class SecurityGroupParser(object):
     def __init__(self, security_group_json):
         self.security_groups = json.loads(security_group_json)
-        self.parsed_groups = []
 
     def parse_groups(self):
+        parsed_groups = []
         for security_group in self.security_groups["SecurityGroups"]:
-            group_id = security_group["GroupId"]
-            group_name = security_group["GroupName"]
-            group_desc = security_group["Description"]
-            vpc_id = security_group["VpcId"]
-            tags = ",".join([str(x["Key"] + "=" + x["Value"]) for x in security_group.get("Tags",[])])
-            prefix = [vpc_id, group_id, group_name, group_desc, tags, "ingress"]
-
+            # Build our security group
+            cur_sg = SecurityGroup()
+            cur_sg.group_id = security_group["GroupId"]
+            cur_sg.name = security_group["GroupName"]
+            cur_sg.description = security_group["Description"]
+            cur_sg.vpc_id = security_group["VpcId"]
+            cur_sg.tags = security_group.get("Tags", [])
             # Ingress rules
-            # Loop through all parsed ingress permissions
-            for parsed_ingress_permission in self.parse_permissions(security_group[INGRESS_PERM_ID]):
-                # Append output to parsed groups
-                self.parsed_groups.append(prefix + parsed_ingress_permission)
+            for parsed_ingress_permission in self.parse_permissions(security_group[INGRESS_PERM_ID], "ingress"):
+                cur_sg.ip_permissions.append(parsed_ingress_permission)
             # Egress rules
-            prefix[5] = "egress"
-            # Loop through all parsed egress permissions
-            for parsed_egress_permission in self.parse_permissions(security_group[EGRESS_PERM_ID]):
-                # Append output to parsed groups
-                self.parsed_groups.append(prefix + parsed_egress_permission)
+            for parsed_egress_permission in self.parse_permissions(security_group[EGRESS_PERM_ID], "egress"):
+                cur_sg.ip_permissions.append(parsed_egress_permission)
+            # Add to output list
+            parsed_groups.append(cur_sg)
+        return parsed_groups
 
-    def parse_permissions(self, permissions_list:list):
+    def parse_permissions(self, permissions_list:list, direction:str):
         parsed_permissions = []
         # Get all host objects
         for permission in permissions_list:
-            # Can return the group name, or drill down to root host entries
-            network_groups = [str(x["CidrIp"]) for x in permission.get("IpRanges", [])]
-            network_groups += [str(x["CidrIp"]) for x in permission.get("Ipv6Ranges", [])]
-            network_groups += [str(x["UserId"]+"/"+x["GroupId"]) for x in permission.get("UserIdGroupPairs", [])]
-            network_groups += [x["GroupName"] for x in permission.get("Groups", [])]
-            #network_groups = self.get_root_networks(permission)
+            cur_perm = IPPermission()
+            cur_perm.direction = direction
+            cur_perm.ipv4_ranges = permission.get("IpRanges", [])
+            cur_perm.ipv6_ranges = permission.get("Ipv6Ranges", [])
+            cur_perm.user_id_group_pairs = permission.get("UserIdGroupPairs", [])
             # Get port ranges as strings
-            from_port = str(permission.get("FromPort","any"))
-            to_port = str(permission.get("ToPort","any"))
-            if from_port == to_port:
-                ports = to_port
-            else:
-                ports = from_port + "-" + to_port
+            cur_perm.from_port = str(permission.get("FromPort","any"))
+            cur_perm.to_port = str(permission.get("ToPort","any"))
             # Get protocols as strings
-            ip_protocol = str(permission.get("IpProtocol","none"))
-            if ip_protocol == "-1":
-                ip_protocol = "any"
+            cur_perm.protocol = str(permission.get("IpProtocol","none"))
             # Add the rules to the output
-            parsed_permissions.append([",".join([str(x) for x in network_groups]), ports, ip_protocol])
-        # Return output
+            parsed_permissions.append(cur_perm)
         return parsed_permissions
 
     def get_root_networks(self, group_list):
@@ -118,9 +143,17 @@ def main():
         sg_description = describe_sg_file.read()
 
     # Create parser
-    aws_parser = SecurityGroupParser(sg_description)
-    aws_parser.parse_groups()
-    aws_parser.print_rules()
+    sg_parser = SecurityGroupParser(sg_description)
+    parsed_sgs = sg_parser.parse_groups()
+
+    parsed_vpcs = None
+    if args.vpcs:
+        with open(args.vpcs, 'r') as describe_vpc_file:
+            vpc_description = describe_vpc_file.read()
+        vpc_parser = VPCParser(vpc_description)
+        parsed_vpcs = vpc_parser.parse_vpcs()
+
+    sg_printer = SecurityGroupPrinter().print_csv(parsed_sgs, parsed_vpcs)
  
     return 0
 
