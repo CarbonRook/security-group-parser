@@ -3,7 +3,9 @@
 # Reference https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-security-groups.html
 
 import argparse
+import csv
 import json
+import sys
 
 EGRESS_PERM_ID = "IpPermissionsEgress"
 INGRESS_PERM_ID = "IpPermissions"
@@ -38,11 +40,61 @@ class VPC(object):
         self.cidr = ""
         self.assigned_subnets = []
 
+    def get_all_tags(self, key:str):
+        return [x["Value"] for x in self.tags if x["Key"] == key]
+
+    def get_tag(self, key:str):
+        value = None
+        values = self.get_all_tags(key)
+        if values:
+            value = values[0]
+        return value
 
 class SecurityGroupPrinter(object):
-    def print_csv(self, security_group:SecurityGroup, vpcs=None):
-        # if protocol = -1 print any
-        # if from_port and to_port are the same just print from_port, if they're different print "from_port-to_port"
+    def print_csv(self, security_groups:list, vpcs=[]):
+        output = []
+        for security_group in security_groups:
+            for permission in security_group.ip_permissions:
+                output_dict = {}
+                # get the current vpc (if it exists in the vpc list provided)
+                cur_vpc = [x for x in vpcs if security_group.vpc_id == x.vpc_id]
+                # we should only have 1 vpc
+                if len(cur_vpc) == 1:
+                    cur_vpc = cur_vpc[0]
+                elif len(cur_vpc) > 1:
+                    raise Exception("Found more than one VPC with the same ID")
+                # continue
+                output_dict["vpc_id"] = security_group.vpc_id
+                if cur_vpc:
+                    output_dict["vpc_id"] = output_dict["vpc_id"] + "(" + str(cur_vpc.get_tag("Name")) + ")"
+                output_dict["group_id"] = security_group.group_id + "(" + str(security_group.name) + ")"
+                output_dict["tags"] = ",".join([str(x["Key"] + "=" + x["Value"]) for x in security_group.tags])
+                output_dict["direction"] = permission.direction
+                # build from/to
+                output_ranges = []
+                output_ranges += [str(x["CidrIp"]) for x in permission.ipv4_ranges]
+                output_ranges += [str(x["CidrIp6"]) for x in permission.ipv6_ranges]
+                output_ranges += [str(x["PrefixListId"]) for x in permission.prefix_list_ids]
+                output_ranges += [str(x["UserId"] + "/" + x["GroupId"]) for x in permission.user_id_group_pairs]
+                output_dict["permitted_entity"] = ",".join([str(x) for x in output_ranges])
+                # set the ports to a single field
+                if permission.from_port == permission.to_port:
+                    output_dict["port_no"] = permission.from_port
+                else:
+                    output_dict["port_no"] = str(permission.from_port) + "-" + str(permission.to_port)
+                # set the protocol to a readable format
+                if permission.protocol == "-1":
+                    output_dict["protocol"] = "any"
+                else:
+                    output_dict["protocol"] = permission.protocol
+                output.append(output_dict)
+        # if we have no ouput abandon
+        if not output:
+            return None
+        # write the csv output
+        writer = csv.DictWriter(sys.stdout, fieldnames=output[0].keys())
+        writer.writeheader()
+        writer.writerows(output)
         return None
 
 
