@@ -1,8 +1,5 @@
 import json
-<<<<<<< HEAD
 from parsers.parser import AWSParser
-=======
->>>>>>> d7d6df26e3185bfc0d5e1b6a15b8fe7d2a859276
 from models.security_group import SecurityGroup
 from models.ip_permission import IPPermission
 
