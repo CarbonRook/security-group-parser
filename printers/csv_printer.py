@@ -23,7 +23,6 @@ class CSVPrinter(object):
                 # continue
                 output_dict["vpc_id"] = security_group.vpc_id
                 if cur_vpc:
-                    print(cur_vpc.vpc_id)
                     output_dict["vpc_id"] = output_dict["vpc_id"] + " (" + str(cur_vpc.get_tag("Name")) + ")"
                 output_dict["group_id"] = security_group.group_id + " (" + str(security_group.name) + ")"
                 output_dict["tags"] = ",".join([x + "=" + y for x,y in security_group.tags.items()])
@@ -39,7 +38,7 @@ class CSVPrinter(object):
                 output_dict["port_no"] = self.cat_ports(permission.from_port, permission.to_port)
                 # set the protocol to a readable format
                 output_dict["protocol"] = self.map_variable(permission.protocol)
-                output_dict["affected_instances"] = "\n".join(instances_affected)
+                output_dict["affected_instances"] = ",".join(instances_affected)
                 output.append(output_dict)
         # if we have no ouput abandon
         if not output:
