@@ -1,5 +1,5 @@
 import json
-from parsers.parser import AWSParser
+from parsers.aws_parser import AWSParser
 from models.instance import Instance
 
 class InstanceParser(AWSParser):
