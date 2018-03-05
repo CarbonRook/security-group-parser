@@ -2,7 +2,7 @@ import csv
 import sys
 
 class CSVPrinter(object):
-    def print_csv(self, security_groups:list, vpcs=None, instances=None):
+    def print_csv(self, security_groups:list, vpcs=None, instances=None, subnets=None):
         output = []
         for security_group in security_groups:
             instances_affected = []
@@ -28,17 +28,12 @@ class CSVPrinter(object):
                 output_dict["tags"] = ",".join([x + "=" + y for x,y in security_group.tags.items()])
                 output_dict["direction"] = permission.direction
                 # build from/to field
-                output_ranges = []
-                output_ranges += [str(x["CidrIp"]) for x in permission.ipv4_ranges]
-                output_ranges += [str(x["CidrIp6"]) for x in permission.ipv6_ranges]
-                output_ranges += [str(x["PrefixListId"]) for x in permission.prefix_list_ids]
-                output_ranges += [str(x["UserId"] + "/" + x["GroupId"]) for x in permission.user_id_group_pairs]
-                output_dict["permitted_entity"] = ",".join([str(x) for x in output_ranges])
+                output_dict["permitted_entity"] = ", ".join([str(x) for x in self.build_permitted_range_list(permission, subnets)])
                 # set the ports to a single field
-                output_dict["port_no"] = self.cat_ports(permission.from_port, permission.to_port)
+                output_dict["port_no"] = self.map_variable(self.cat_ports(permission.from_port, permission.to_port))
                 # set the protocol to a readable format
                 output_dict["protocol"] = self.map_variable(permission.protocol)
-                output_dict["affected_instances"] = ",".join(instances_affected)
+                output_dict["affected_instances"] = ", ".join(instances_affected)
                 output.append(output_dict)
         # if we have no ouput abandon
         if not output:
@@ -48,6 +43,40 @@ class CSVPrinter(object):
         writer.writeheader()
         writer.writerows(output)
         return None
+
+    def enrich_subnets(self, unenriched_ipv4_cidrs, subnets):
+        # We want CIDR and the subnet name if possible
+        enriched_ipv4_ranges = []
+        for cidr in unenriched_ipv4_cidrs:
+            subnets = [x for x in subnets if x.cidr == cidr]
+            if len(subnets) > 0:
+                subnet_names_arr = []
+                for subnet in subnets:
+                    subnet_names.append(subnet.get_tag("Name"))
+                subnet_names = ",".join(subnet_names_arr)
+                enriched_ipv4_ranges.append(cidr + " (" + subnet_names + ")")
+            else:
+                enriched_ipv4_ranges.append(cidr)
+        return enriched_ipv4_ranges
+
+
+    def build_permitted_range_list(self, permission, subnets):
+        # Grab the unenriched ranges
+        unenriched_ipv4_ranges = [str(x["CidrIp"]) for x in permission.ipv4_ranges]
+        unenriched_ipv6_ranges = [str(x["CidrIp6"]) for x in permission.ipv6_ranges]
+
+        output_ranges = []
+        if subnets:
+            output_ranges += self.enrich_subnets(unenriched_ipv4_ranges, subnets)
+        else:
+            output_ranges += unenriched_ipv4_ranges
+
+        # TODO: Enrich ipv6
+        output_ranges += unenriched_ipv6_ranges
+        output_ranges += [str(x["PrefixListId"]) for x in permission.prefix_list_ids]
+        output_ranges += [str(x["UserId"] + "/" + x["GroupId"]) for x in permission.user_id_group_pairs]
+        return output_ranges
+        
 
     def map_variable(self, input_str):
         var_map = {
