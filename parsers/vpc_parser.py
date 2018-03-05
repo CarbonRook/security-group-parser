@@ -1,5 +1,4 @@
 import json
-<<<<<<< HEAD
 from parsers.parser import AWSParser
 from models.vpc import VPC
 
