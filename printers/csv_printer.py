@@ -13,7 +13,7 @@ class CSVPrinter(object):
                 instances_affected = []
                 for instance in instances:
                     if instance.has_security_group(security_group.group_id):
-                        instances_affected.append(CSVPrinter.get_enriched_str(instance.id, instance.get_tag("Name")))
+                        instances_affected.append(CSVPrinter.get_enriched_str(instance.instance_id, instance.get_tag("Name")))
             for permission in security_group.ip_permissions:
                 output_dict = dict()
                 # Get the VPC ID and the associated VPC name from the Name tag is available
@@ -51,22 +51,22 @@ class CSVPrinter(object):
         return x + " (" + y + ")"
 
     @staticmethod
-    def enrich_vpc(self, security_group, vpcs):
+    def enrich_vpc(security_group, vpcs):
         # Check if we have VPCs defined
         if not vpcs:
             return security_group.vpc_id
 
-        enriched_vpcs = []
+        enriched_vpcs = ""
         # get the current vpc (if it exists in the vpc list provided)
         vpcs_with_id = [x for x in vpcs if x.vpc_id == security_group.vpc_id]
         if len(vpcs_with_id) > 0:
             vpcs_names_arr = []
-            for vpc in vpcs:
-                vpcs_names_arr.append(vpc.get_tag("Name"))
+            for vpc in vpcs_with_id:
+                vpcs_names_arr.append(str(vpc.get_tag("Name")))
             vpc_names = ",".join(vpcs_names_arr)
-            enriched_vpcs.append(CSVPrinter.get_enriched_str(security_group.vpc_id, vpc_names))
+            enriched_vpcs = CSVPrinter.get_enriched_str(security_group.vpc_id, vpc_names)
         else:
-            enriched_vpcs.append(security_group.vpc_id)
+            enriched_vpcs = security_group.vpc_id
         return enriched_vpcs
 
     @staticmethod
