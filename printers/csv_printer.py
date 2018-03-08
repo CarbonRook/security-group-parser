@@ -3,17 +3,21 @@ import sys
 
 
 class CSVPrinter(object):
-    def print_csv(self, security_groups: list, vpcs=None, instances=None, subnets=None):
+    def print_csv(self, security_groups: list, vpcs=None, instances=None, subnets=None, db_instances=None):
         output = []
         for security_group in security_groups:
             # Affected instances are the instances which have the security assigned to them
             instances_affected = []
             if instances is not None:
                 # If we have been given instance desciption then we can retrieve a list of affected instances
-                instances_affected = []
                 for instance in instances:
                     if instance.has_security_group(security_group.group_id):
                         instances_affected.append(CSVPrinter.get_enriched_str(instance.instance_id, instance.get_tag("Name")))
+            db_instances_affected = []
+            if db_instances is not None:
+                for db_instance in db_instances:
+                    if db_instance.has_security_group(security_group.group_id):
+                        db_instances_affected.append(CSVPrinter.get_enriched_str(db_instance.db_instance_resource_id, db_instance.db_instance_id))
             for permission in security_group.ip_permissions:
                 output_dict = dict()
                 # Get the VPC ID and the associated VPC name from the Name tag is available

@@ -7,6 +7,7 @@ from parsers.security_group_parser import SecurityGroupParser
 from parsers.vpc_parser import VPCParser
 from parsers.instance_parser import InstanceParser
 from parsers.subnet_parser import SubnetParser
+from parsers.db_instance_parser import DBInstanceParser
 from printers.csv_printer import CSVPrinter
 
 def main():
@@ -17,6 +18,7 @@ def main():
     parser.add_argument("--vpcs", help="Path to file containing ec2 describe-vpcs")
     parser.add_argument("--instances", help="Path to file containing ec2 describe-instances")
     parser.add_argument("--subnets", help="Path to file containing ec2 describe-subnets")
+    parser.add_argument("--db_instances", help="Path to file containing rds describe-db-instances")
     args = parser.parse_args()
 
     # Read contents
@@ -41,6 +43,13 @@ def main():
         instance_parser = InstanceParser(instance_description)
         parsed_instances = instance_parser.parse()
 
+    parsed_db_instances = None
+    if args.db_instances:
+        with open(args.db_instances, 'r') as describe_db_instances_file:
+            db_instance_description = describe_db_instances_file.read()
+        db_instance_parser = DBInstanceParser(db_instance_description)
+        parsed_db_instances = db_instance_parser.parse()
+
     parsed_subnets = None
     if args.subnets:
         with open(args.subnets, 'r') as describe_subnets_file:
@@ -48,7 +57,7 @@ def main():
         subnet_parser = SubnetParser(subnet_description)
         parsed_subnets = subnet_parser.parse()
 
-    sg_printer = CSVPrinter().print_csv(parsed_sgs, parsed_vpcs, parsed_instances, parsed_subnets)
+    sg_printer = CSVPrinter().print_csv(parsed_sgs, parsed_vpcs, parsed_instances, parsed_db_instances, parsed_subnets)
  
     return 0
 
