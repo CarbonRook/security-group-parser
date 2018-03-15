@@ -1,6 +1,6 @@
 import json
 from parsers.aws_parser import AWSParser
-from models.instance import Instance
+from models.db_instance import DBInstance
 from models.subnet import Subnet
 
 class DBInstanceParser(AWSParser):

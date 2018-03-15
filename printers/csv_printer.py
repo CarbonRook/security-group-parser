@@ -3,7 +3,7 @@ import sys
 
 
 class CSVPrinter(object):
-    def print_csv(self, security_groups: list, vpcs=None, instances=None, subnets=None, db_instances=None):
+    def print_csv(self, security_groups: list, vpcs=None, instances=None, db_instances=None, subnets=None):
         output = []
         for security_group in security_groups:
             # Affected instances are the instances which have the security assigned to them
